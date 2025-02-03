@@ -35,7 +35,7 @@ This C program implements a **storage manager** for database file operations. It
 
 ### Step 4:  Execute the test cases.
 
-    ./test_17
+    ./storage_manager_test
 
 ### Step 5:  Once again, use "make clean" to remove generated executable files, and repeat steps 3 and 4 to rerun the assignment.
 
