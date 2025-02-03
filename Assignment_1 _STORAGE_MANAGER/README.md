@@ -24,7 +24,7 @@ This C program implements a **storage manager** for database file operations. It
 
 2. **Compile with GCC**:  
    ```bash  
-   gcc dberror.c storage_mgr.c test_assign1_1.c -o storage_manager_test  
+   gcc dberror.c storage_mgr.c test_assign1_1.c -o test_17  
 ### Step 2: Remove any previously compiled files.
   
     make clean  
@@ -35,7 +35,7 @@ This C program implements a **storage manager** for database file operations. It
 
 ### Step 4:  Execute the test cases.
 
-    ./storage_manager_test
+    ./test_17
 
 ### Step 5:  Once again, use "make clean" to remove generated executable files, and repeat steps 3 and 4 to rerun the assignment.
 
