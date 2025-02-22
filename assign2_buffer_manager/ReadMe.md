@@ -156,3 +156,7 @@ leaks -atExit -- ./test_case2 | grep LEAK:
 Expected Output:
 
 Process XXXX is not debuggable. No memory leaks detected.
+
+Loom Video Link:
+
+https://www.loom.com/share/97545ee8b0244b788a4287fcbaeca9ea?sid=69f96f65-9b68-48d1-891f-a92c20ee37f6
