@@ -149,9 +149,9 @@ For MacOS Users:
 
 Run the following command to check for memory leaks:
 
-leaks -atExit -- ./test_case1 | grep LEAK:
+leaks -atExit -- ./test_case1 | grep
 
-leaks -atExit -- ./test_case2 | grep LEAK:
+leaks -atExit -- ./test_case2 | grep 
 
 Expected Output:
 
