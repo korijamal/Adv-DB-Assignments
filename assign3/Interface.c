@@ -6,237 +6,248 @@
 #include "tables.h"
 #include "test_helper.h"
 
-const char* DataTypes[] = {"Integer", "String", "Float", "BoolValue"};
+const char* DataTypeLabels[] = {"Integer", "String", "Float", "Boolean"};
 
 int main()
 {
-    Record *r;
-    printf("\n\t\tInterface for DB\n");
-    char tempVariableString[50];
-    char tableName[256]; // Fixed-size array for table name
-    int tempVariableInt;
-    int *keys, *columnSizes;
-    Value *value;
-    bool tempVariableBool;
-    int choice, num, keynum = 0, i, dtChoice, keyChoice;
-    char **names, *datatypes;
-    Schema *schema;
-    RM_TableData table;
-    float tempVariableFloat;
-    DataType *dt;
+    Record *recordPtr;
+    printf("\n\t\tWelcome to the Storage Manager\n");
+    char inputString[50];
+    char tableIdentifier[256]; 
+    int inputInt;
+    int *primaryKeys, *columnDimensions;
+    Value *valuePtr;
+    bool inputBool;
+    int userChoice, attributeCount, keyCount = 0, i, typeChoice, keySelection;
+    char **attributeNames, *dataTypes;
+    Schema *tableSchema;
+    RM_TableData tableData;
+    float inputFloat;
+    DataType *dataTypeArray;
 
     initRecordManager(NULL);
 
     while (1)
     {
         printf("\n");
-        printf("\n1. Create new table\n");
         printf("\n");
-        printf("2. Delete table\n");
+        printf("\n1. Create a new table\n");
         printf("\n");
-        printf("3. Insert record into the table\n");
+        printf("2. Delete a table\n");
         printf("\n");
-        printf("4. Delete record from the table\n");
+        printf("3. Insert a record into the table\n");
         printf("\n");
-        printf("5. Update record in the table\n");
+        printf("4. Delete a record from the table\n");
+        printf("\n");
+        printf("5. Update a record in the table\n");
         printf("\n");
         printf("6. Exit\n");
-        printf("Enter your choice :  ");
-        scanf("%d", &choice);
+        printf("Enter your choice: ");
+        scanf("%d", &userChoice);
 
-        if (choice == 1)
+        if (userChoice == 1) // Create Table
         {
             printf("\nEnter table name:\n");
-            scanf("%255s", tableName); // Limit table name to 255 characters
+            scanf("%255s", tableIdentifier); 
 
             printf("\nCreate schema of the table\n Enter number of attributes:");
-            scanf("%d", &num);
+            scanf("%d", &attributeCount);
 
-            dt = (DataType *)malloc(sizeof(DataType) * num);
-            names = (char **)malloc(sizeof(char *) * num);
-            columnSizes = (int *)malloc(sizeof(int) * num);
-            keys = (int *)malloc(sizeof(int) * 0);
+            dataTypeArray = (DataType *)malloc(sizeof(DataType) * attributeCount);
+            attributeNames = (char **)malloc(sizeof(char *) * attributeCount);
+            columnDimensions = (int *)malloc(sizeof(int) * attributeCount);
+            primaryKeys = (int *)malloc(sizeof(int) * 0);
 
-            for (int i = 0; i < num; i++)
+            for (int i = 0; i < attributeCount; i++)
             {
                 printf("\nEnter name of the column:\n");
-                names[i] = (char *)malloc(256); // Limit attribute name to 255 characters
-                scanf("%255s", names[i]);
+                attributeNames[i] = (char *)malloc(256); // Limit attribute name to 255 characters
+                scanf("%255s", attributeNames[i]);
 
                 printf("\nSelect datatype of the column:\n");
                 printf("\n1. Integer\n");
                 printf("\n2. Float\n");
                 printf("\n3. String\n");
-                printf("\n4. Bool\n");
-                scanf("%d", &dtChoice);
+                printf("\n4. Boolean\n");
+                scanf("%d", &typeChoice);
 
-                if (dtChoice == 1)
+                if (typeChoice == 1)
                 {
-                    dt[i] = DT_INT;
-                    columnSizes[i] = 0;
+                    dataTypeArray[i] = DT_INT;
+                    columnDimensions[i] = 0;
                 }
-                else if (dtChoice == 2)
+                else if (typeChoice == 2)
                 {
-                    dt[i] = DT_FLOAT;
-                    columnSizes[i] = 0;
+                    dataTypeArray[i] = DT_FLOAT;
+                    columnDimensions[i] = 0;
                 }
-                else if (dtChoice == 3)
+                else if (typeChoice == 3)
                 {
-                    dt[i] = DT_STRING;
+                    dataTypeArray[i] = DT_STRING;
                     printf("\n Enter size of the column:\n");
-                    scanf("%d", &columnSizes[i]);
+                    scanf("%d", &columnDimensions[i]);
                 }
-                else if (dtChoice == 4)
+                else if (typeChoice == 4)
                 {
-                    dt[i] = DT_BOOL;
-                    columnSizes[i] = 0;
+                    dataTypeArray[i] = DT_BOOL;
+                    columnDimensions[i] = 0;
                 }
             }
 
-            char **cpNames = (char **)malloc(sizeof(char *) * num);
-            for (int i = 0; i < num; i++)
+            char **copiedNames = (char **)malloc(sizeof(char *) * attributeCount);
+            for (int i = 0; i < attributeCount; i++)
             {
-                cpNames[i] = names[i];
+                copiedNames[i] = attributeNames[i];
             }
 
-            schema = createSchema(num, cpNames, dt, columnSizes, 0, NULL);
-            printf("%s", serializeSchema(schema));
-            createTable(tableName, schema);
+            tableSchema = createSchema(attributeCount, copiedNames, dataTypeArray, columnDimensions, 0, NULL);
+            printf("%s", serializeSchema(tableSchema));
+            createTable(tableIdentifier, tableSchema);
+
+            if (createTable(tableIdentifier, tableSchema) == RC_OK)
+                printf("Table '%s' created successfully!\n", tableIdentifier);
+            else
+                printf("Error: Failed to create table '%s'.\n", tableIdentifier);
         }
-        else if (choice == 2)
+        else if (userChoice == 2) // Delete Table
         {
             printf("Enter table name to delete:\n");
-            scanf("%255s", tableName);
-            deleteTable(tableName);
+            scanf("%255s", tableIdentifier);
+            deleteTable(tableIdentifier);
+            if (deleteTable(tableIdentifier) == RC_OK)
+                printf("Table '%s' deleted successfully!\n", tableIdentifier);
+            else
+                printf("Error: Table '%s' does not exist.\n", tableIdentifier);
         }
-        else if (choice == 3)
+        else if (userChoice == 3) // Inserting record into the table
         {
-            openTable(&table, tableName);
-            printf("%s", serializeSchema(table.schema));
+            openTable(&tableData, tableIdentifier);
+            printf("%s", serializeSchema(tableData.schema));
             printf("Enter number of records to insert:\n");
-            scanf("%d", &num);
-            createRecord(&r, table.schema);
+            scanf("%d", &attributeCount);
+            createRecord(&recordPtr, tableData.schema);
 
-            for (int i = 0; i < num; i++)
+            for (int i = 0; i < attributeCount; i++)
             {
-                for (int j = 0; j < table.schema->numAttr; j++)
+                for (int j = 0; j < tableData.schema->numAttr; j++)
                 {
-                    printf("\nEnter value for attribute %s with datatype %s \n", table.schema->attrNames[j], DataTypes[table.schema->dataTypes[j]]);
+                    printf("\nEnter value for attribute %s with datatype %s \n", tableData.schema->attrNames[j], DataTypeLabels[tableData.schema->dataTypes[j]]);
 
-                    if (table.schema->dataTypes[j] == DT_INT)
+                    if (tableData.schema->dataTypes[j] == DT_INT)
                     {
-                        scanf("%d", &tempVariableInt);
-                        MAKE_VALUE(value, DT_INT, tempVariableInt);
+                        scanf("%d", &inputInt);
+                        MAKE_VALUE(valuePtr, DT_INT, inputInt);
                     }
-                    else if (table.schema->dataTypes[j] == DT_FLOAT)
+                    else if (tableData.schema->dataTypes[j] == DT_FLOAT)
                     {
-                        scanf("%f", &tempVariableFloat);
-                        MAKE_VALUE(value, DT_FLOAT, tempVariableFloat);
+                        scanf("%f", &inputFloat);
+                        MAKE_VALUE(valuePtr, DT_FLOAT, inputFloat);
                     }
-                    else if (table.schema->dataTypes[j] == DT_STRING)
+                    else if (tableData.schema->dataTypes[j] == DT_STRING)
                     {
-                        scanf("%s", tempVariableString);
-                        MAKE_STRING_VALUE(value, tempVariableString);
+                        scanf("%s", inputString);
+                        MAKE_STRING_VALUE(valuePtr, inputString);
                     }
-                    else if (table.schema->dataTypes[j] == DT_BOOL)
+                    else if (tableData.schema->dataTypes[j] == DT_BOOL)
                     {
-                        scanf("%d", &tempVariableBool);
-                        MAKE_VALUE(value, DT_BOOL, tempVariableBool);
+                        scanf("%d", &inputBool);
+                        MAKE_VALUE(valuePtr, DT_BOOL, inputBool);
                     }
 
-                    setAttr(r, table.schema, j, value);
-                    insertRecord(&table, r);
-                    freeVal(value);
-                }
+                    setAttr(recordPtr, tableData.schema, j, valuePtr);
+                    insertRecord(&tableData, recordPtr);
+                    freeVal(valuePtr);
+                }  
             }
+            printf("Records inserted successfully into '%s'!\n", tableIdentifier);
         }
-        else if (choice == 4)
+        else if (userChoice == 4) // Delete record in the table
         {
             printf("Enter number of records to delete:\n");
-            scanf("%d", &num);
-            createRecord(&r, table.schema);
+            scanf("%d", &attributeCount);
+            createRecord(&recordPtr, tableData.schema);
 
             printf("\nSelect attribute based on which you want to delete a record:\n");
-            for (int i = 0; i < table.schema->numAttr; i++)
+            for (int i = 0; i < tableData.schema->numAttr; i++)
             {
-                printf("%d:%s\n", i + 1, table.schema->attrNames[i]);
+                printf("%d:%s\n", i + 1, tableData.schema->attrNames[i]);
             }
-            scanf("%d", &choice);
-            choice--;
+            scanf("%d", &userChoice);
+            userChoice--;
 
-            for (int i = 0; i < num; i++)
+            for (int i = 0; i < attributeCount; i++)
             {
                 printf("\nEnter value of the attribute by which you want to delete a record:\n");
 
-                if (table.schema->dataTypes[choice] == DT_INT)
+                if (tableData.schema->dataTypes[userChoice] == DT_INT)
                 {
-                    scanf("%d", &tempVariableInt);
-                    MAKE_VALUE(value, DT_INT, tempVariableInt);
+                    scanf("%d", &inputInt);
+                    MAKE_VALUE(valuePtr, DT_INT, inputInt);
                 }
-                else if (table.schema->dataTypes[choice] == DT_FLOAT)
+                else if (tableData.schema->dataTypes[userChoice] == DT_FLOAT)
                 {
-                    scanf("%f", &tempVariableFloat);
-                    MAKE_VALUE(value, DT_FLOAT, tempVariableFloat);
+                    scanf("%f", &inputFloat);
+                    MAKE_VALUE(valuePtr, DT_FLOAT, inputFloat);
                 }
-                else if (table.schema->dataTypes[choice] == DT_STRING)
+                else if (tableData.schema->dataTypes[userChoice] == DT_STRING)
                 {
-                    scanf("%s", tempVariableString);
-                    MAKE_STRING_VALUE(value, tempVariableString);
+                    scanf("%s", inputString);
+                    MAKE_STRING_VALUE(valuePtr, inputString);
                 }
-                else if (table.schema->dataTypes[choice] == DT_BOOL)
+                else if (tableData.schema->dataTypes[userChoice] == DT_BOOL)
                 {
-                    scanf("%d", &tempVariableBool);
-                    MAKE_VALUE(value, DT_BOOL, tempVariableBool);
+                    scanf("%d", &inputBool);
+                    MAKE_VALUE(valuePtr, DT_BOOL, inputBool);
                 }
 
-                setAttr(r, table.schema, choice, value);
-                deleteRecord(&table, r->id);
-                freeVal(value);
+                setAttr(recordPtr, tableData.schema, userChoice, valuePtr);
+                deleteRecord(&tableData, recordPtr->id);
+                freeVal(valuePtr);
             }
         }
-        else if (choice == 5)
+        else if (userChoice == 5) // Updating the table
         {
-            openTable(&table, tableName);
-            printf("%s", serializeSchema(table.schema));
+            openTable(&tableData, tableIdentifier);
+            printf("%s", serializeSchema(tableData.schema));
             printf("Enter number of records to update:\n");
-            scanf("%d", &num);
-            createRecord(&r, table.schema);
+            scanf("%d", &attributeCount);
+            createRecord(&recordPtr, tableData.schema);
 
-            printf("\nSelect attribute to update based on its index (0 to %d):\n", table.schema->numAttr - 1);
+            printf("\nSelect attribute to update based on its index (0 to %d):\n", tableData.schema->numAttr - 1);
             int attributeIndex;
             scanf("%d", &attributeIndex);
 
-            for (int i = 0; i < num; i++)
+            for (int i = 0; i < attributeCount; i++)
             {
-                printf("\nEnter new value for the attribute with datatype %s: \n", DataTypes[table.schema->dataTypes[attributeIndex]]);
+                printf("\nEnter new value for the attribute with datatype %s: \n", DataTypeLabels[tableData.schema->dataTypes[attributeIndex]]);
 
-                if (table.schema->dataTypes[attributeIndex] == DT_INT)
+                if (tableData.schema->dataTypes[attributeIndex] == DT_INT)
                 {
-                    scanf("%d", &tempVariableInt);
-                    MAKE_VALUE(value, DT_INT, tempVariableInt);
+                    scanf("%d", &inputInt);
+                    MAKE_VALUE(valuePtr, DT_INT, inputInt);
                 }
-                else if (table.schema->dataTypes[attributeIndex] == DT_FLOAT)
+                else if (tableData.schema->dataTypes[attributeIndex] == DT_FLOAT)
                 {
-                    scanf("%f", &tempVariableFloat);
-                    MAKE_VALUE(value, DT_FLOAT, tempVariableFloat);
+                    scanf("%f", &inputFloat);
+                    MAKE_VALUE(valuePtr, DT_FLOAT, inputFloat);
                 }
-                else if (table.schema->dataTypes[attributeIndex] == DT_STRING)
+                else if (tableData.schema->dataTypes[attributeIndex] == DT_STRING)
                 {
-                    scanf("%s", tempVariableString);
-                    MAKE_STRING_VALUE(value, tempVariableString);
+                    scanf("%s", inputString);
+                    MAKE_STRING_VALUE(valuePtr, inputString);
                 }
-                else if (table.schema->dataTypes[attributeIndex] == DT_BOOL)
+                else if (tableData.schema->dataTypes[attributeIndex] == DT_BOOL)
                 {
-                    scanf("%d", &tempVariableBool);
-                    MAKE_VALUE(value, DT_BOOL, tempVariableBool);
+                    scanf("%d", &inputBool);
+                    MAKE_VALUE(valuePtr, DT_BOOL, inputBool);
                 }
 
-                setAttr(r, table.schema, attributeIndex, value);
-                updateRecord(&table, r);
-                freeVal(value);
+                setAttr(recordPtr, tableData.schema, attributeIndex, valuePtr);
+                updateRecord(&tableData, recordPtr);
+                freeVal(valuePtr);
             }
         }
-        else if (choice == 6)
+        else if (userChoice == 6)  // Exit and cleanup
         {
             printf("\nEnding Interface for DB!!!");
             shutdownRecordManager();
@@ -244,7 +255,6 @@ int main()
         }
     }
 
-    // Exit and cleanup
     printf("\nEnding Interface for DB!!!");
     shutdownRecordManager();
     exit(0);
