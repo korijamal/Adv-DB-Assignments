@@ -9,450 +9,373 @@
 #include "storage_mgr.h"
 #include "record_mgr.h"
 
+SM_FileHandle fileHandle;
+int recordsPerPage;
+Schema *globalSchema = NULL;
 
-SM_FileHandle fHandle;
-int no_of_records_per_page;
-Schema *schma_g17 = NULL;
+typedef struct RecordManagerScan {
+    Expr *condition;
+    int scanID;
+    RID recordID;
+    float scanMin;
+    int scanCount;
+} RecordManagerScan;
 
-typedef struct Recrd_mgr_scan_g17
-{
-    Expr *condition_g17;
-    int scan_i_d_g17;
-    RID recrd_i_d_g17;
-    float scan_m_i_n_g17;
-    int scan_count_g17;
+RecordManagerScan scanData;
 
-} Recrd_mgr_scan_g17;
-
-Recrd_mgr_scan_g17 scan_MG_Data_g17;
-
-typedef struct record_mgr_table_scan
-{
-    RM_TableData *rel;
+typedef struct RecordManagerTableScan {
+    RM_TableData *relation;
     void *mgmtData;
-    int max_no_of_slots_g17;
-    int length_of_slot_g17;
-} record_mgr_table_scan;
-record_mgr_table_scan scan_Mgmt_Data;
+    int maxSlots;
+    int slotLength;
+} RecordManagerTableScan;
 
-typedef struct recrd_mgr_tablemgr_g17
-{
-    BM_BufferPool *bm;
-    int final_page_recrd_read_g17;
-    int no_of_recrds_g17;
+RecordManagerTableScan scanManagementData;
 
-} recrd_mgr_tablemgr_g17;
-recrd_mgr_tablemgr_g17 recrd_table_mgr_g17;
+typedef struct RecordManagerTable {
+    BM_BufferPool *bufferPool;
+    int lastPageRead;
+    int totalRecords;
+} RecordManagerTable;
 
-void *return_null_g17()
-{
+RecordManagerTable tableManager;
+
+void *returnNull() {
     return NULL;
 }
 
-int getNumTuples(RM_TableData *rel)
-{
-    return recrd_table_mgr_g17.no_of_recrds_g17;
+int getNumTuples(RM_TableData *relation) {
+    return tableManager.totalRecords;
 }
 
-void initalize_schema()
-{
-    int a_g17 = -1;
+void initializeSchema() {
+    int defaultVal = -1;
 
-    schma_g17->keySize = a_g17;
-    schma_g17->numAttr = a_g17;
+    globalSchema->keySize = defaultVal;
+    globalSchema->numAttr = defaultVal;
 
-    // Assuming these are of the correct types
-    int *typeLength = return_null_g17();
-    int *keyAttrs = return_null_g17();
-    DataType *dataTypes = return_null_g17();
-    char **attrNames = return_null_g17();
+    int *typeLength = returnNull();
+    int *keyAttrs = returnNull();
+    DataType *dataTypes = returnNull();
+    char **attrNames = returnNull();
 
-    // Assign values to schma_g17 members
-    schma_g17->typeLength = typeLength;
-
-    schma_g17->keyAttrs = keyAttrs;
-
-    schma_g17->dataTypes = dataTypes;
-    
-    schma_g17->attrNames = attrNames;
-
-
+    globalSchema->typeLength = typeLength;
+    globalSchema->keyAttrs = keyAttrs;
+    globalSchema->dataTypes = dataTypes;
+    globalSchema->attrNames = attrNames;
 }
 
-int schema_memory_alloc(int a)
-{
-    if (a == 1)
-    {
-        schma_g17 = (Schema *)malloc(sizeof(Schema));
-        return schma_g17 == NULL ? 0 : 1;
-    }
-    else
-    {
-        if (schma_g17 != return_null_g17())
-        {
-            free(schma_g17);
-            schma_g17 = return_null_g17();
+int allocateSchemaMemoryFlag(int flag) {
+    if (flag == 1) {
+        globalSchema = (Schema *)malloc(sizeof(Schema));
+        return globalSchema == NULL ? 0 : 1;
+    } else {
+        if (globalSchema != returnNull()) {
+            free(globalSchema);
+            globalSchema = returnNull();
             return 1;
-        }
-        else
-        {
+        } else {
             return 0;
         }
     }
 }
 
-RC initRecordManager(void *mgmtData)
-{
-    int a = schema_memory_alloc(1);
+RC initRecordManager(void *managementData) {
+    int status = allocateSchemaMemoryFlag(1);
 
-    if (a == 0)
-    {
+    if (status == 0) {
         return RC_MEMORY_ALLOC_ERROR;
     }
 
-    initalize_schema();
+    initializeSchema();
     return RC_OK;
 }
 
-RC shutdownRecordManager()
-{
-    schema_memory_alloc(0);
-
+RC shutdownRecordManager() {
+    allocateSchemaMemoryFlag(0);
     return RC_OK;
 }
 
-RC createAndOpenFile(char *name, SM_FileHandle *fHandle)
-{
-    if (createPageFile(name) != RC_OK)
-    {
-        RC_message = "File could not be created in Create Table";
+RC createAndOpenFile(char *fileName, SM_FileHandle *fileHandle) {
+    if (createPageFile(fileName) != RC_OK) {
+        RC_message = "File creation failed in Create Table";
         return RC_ERROR;
     }
 
-    if (openPageFile(name, fHandle) != RC_OK)
-    {
-        RC_message = "File could not be opened in Create Table";
+    if (openPageFile(fileName, fileHandle) != RC_OK) {
+        RC_message = "File opening failed in Create Table";
         return RC_ERROR;
     }
 
     return RC_OK;
 }
 
-RC initializeBufferPoolForTable(BM_BufferPool *bm, char *name)
-{
-    if (initBufferPool(bm, name, 100, RS_FIFO, NULL) == RC_OK)
-    {
+RC initializeBufferPoolForTable(BM_BufferPool *bufferPool, char *fileName) {
+    if (initBufferPool(bufferPool, fileName, 100, RS_FIFO, NULL) == RC_OK) {
         return RC_OK;
-    }
-    else
-    {
-        RC_message = "Buffer Pool cannot be initialized in Create Table Function";
+    } else {
+        RC_message = "Buffer Pool initialization failed in Create Table";
         return RC_ERROR;
     }
 }
-void setupRecordMetadata(recrd_mgr_tablemgr_g17 *mgmtdata, Schema *schema)
-{
-    int no_of_records_per_page = PAGE_SIZE / getRecordSize(schema);
-    scan_Mgmt_Data.length_of_slot_g17 = getRecordSize(schema);
-    scan_Mgmt_Data.max_no_of_slots_g17 = no_of_records_per_page;
-    mgmtdata->final_page_recrd_read_g17 = 1;
-    mgmtdata->no_of_recrds_g17 = 0;
-    recrd_table_mgr_g17 = *mgmtdata;
+
+void setupRecordMetadata(RecordManagerTable *managementData, Schema *schema) {
+    int recordsPerPage = PAGE_SIZE / getRecordSize(schema);
+    scanManagementData.slotLength = getRecordSize(schema);
+    scanManagementData.maxSlots = recordsPerPage;
+    managementData->lastPageRead = 1;
+    managementData->totalRecords = 0;
+    tableManager = *managementData;
 }
 
-RC serializeAndWriteSchema(Schema *schema, SM_FileHandle *fHandle)
-{
+RC serializeAndWriteSchema(Schema *schema, SM_FileHandle *fileHandle) {
     char *schemaPageContent = serializeSchema(schema);
-    if (writeBlock(0, fHandle, schemaPageContent) != RC_OK)
-    {
+    if (writeBlock(0, fileHandle, schemaPageContent) != RC_OK) {
         RC_message = "Error writing schema to page 0";
         return RC_ERROR;
     }
     return RC_OK;
 }
 
-RC createTable(char *name, Schema *schema)
-{
-    recrd_mgr_tablemgr_g17 mgmtdata;
-    mgmtdata.bm = (BM_BufferPool *)malloc(sizeof(BM_BufferPool));
+RC createTable(char *fileName, Schema *schema) {
+    RecordManagerTable managementData;
+    managementData.bufferPool = (BM_BufferPool *)malloc(sizeof(BM_BufferPool));
     RC status;
-    status = createAndOpenFile(name, &fHandle);
+    status = createAndOpenFile(fileName, &fileHandle);
     if (status != RC_OK)
         return status;
-    status = initializeBufferPoolForTable(mgmtdata.bm, name);
+    status = initializeBufferPoolForTable(managementData.bufferPool, fileName);
     if (status != RC_OK)
         return status;
-    memcpy(schma_g17, schema, sizeof(Schema));
-    status = serializeAndWriteSchema(schema, &fHandle);
+    memcpy(globalSchema, schema, sizeof(Schema));
+    status = serializeAndWriteSchema(schema, &fileHandle);
     if (status != RC_OK)
         return status;
-    setupRecordMetadata(&mgmtdata, schema);
+    setupRecordMetadata(&managementData, schema);
     return RC_OK;
 }
 
-RC checkIfFileExists(char *name)
-{
-    if (access(name, F_OK) == 0)
-    {
+RC checkIfFileExists(char *fileName) {
+    if (access(fileName, F_OK) == 0) {
         return RC_OK;
-    }
-    else
-    {
-        RC_message = "Table we are looking for does not have a file.";
+    } else {
+        RC_message = "Table file not found.";
         return RC_FILE_NOT_FOUND;
     }
 }
 
-void initializeTableData(RM_TableData *rel, char *name, SM_FileHandle *fHandle)
-{
-    rel->name = name;
-    rel->schema = schma_g17;
-    rel->mgmtData = fHandle;
+void initializeTableData(RM_TableData *relation, char *fileName, SM_FileHandle *fileHandle) {
+    relation->name = fileName;
+    relation->schema = globalSchema;
+    relation->mgmtData = fileHandle;  // Use mgmtData instead of managementData
 }
 
-RC openTable(RM_TableData *rel, char *name)
-{
-    RC status = checkIfFileExists(name);
+RC openTable(RM_TableData *relation, char *fileName) {
+    RC status = checkIfFileExists(fileName);
     if (status != RC_OK)
         return status;
-    initializeTableData(rel, name, &fHandle);
+    initializeTableData(relation, fileName, &fileHandle);
     return RC_OK;
 }
 
-RC openAndCloseTableFile(char *name)
-{
-    if (openPageFile(name, &fHandle) != RC_OK)
-    {
+RC openAndCloseTableFile(char *fileName) {
+    if (openPageFile(fileName, &fileHandle) != RC_OK) {
         RC_message = "Error opening the file to close.";
         return RC_ERROR;
     }
-    if (closePageFile(&fHandle) != RC_OK)
-    {
+    if (closePageFile(&fileHandle) != RC_OK) {
         RC_message = "Error closing the file.";
         return RC_ERROR;
     }
     return RC_OK;
 }
 
-RC closeTable(RM_TableData *rel)
-{
+RC closeTable(RM_TableData *relation) {
     RC status;
-    status = checkIfFileExists(rel->name);
+    status = checkIfFileExists(relation->name);
     if (status != RC_OK)
         return status;
-    status = openAndCloseTableFile(rel->name);
+    status = openAndCloseTableFile(relation->name);
     if (status != RC_OK)
         return status;
     return RC_OK;
 }
 
-RC deleteTableFile(char *name)
-{
-    if (destroyPageFile(name) != RC_OK)
-    {
+RC deleteTableFile(char *fileName) {
+    if (destroyPageFile(fileName) != RC_OK) {
         RC_message = "Error deleting the table file.";
         return RC_ERROR;
     }
     return RC_OK;
 }
 
-RC deleteTable(char *name)
-{
+RC deleteTable(char *fileName) {
     RC status;
-    status = checkIfFileExists(name);
+    status = checkIfFileExists(fileName);
     if (status != RC_OK)
         return status;
-    status = deleteTableFile(name);
+    status = deleteTableFile(fileName);
     if (status != RC_OK)
         return status;
     return RC_OK;
 }
 
-void dirty_unpin_force_g17(BM_BufferPool *bm, BM_PageHandle *page)
-{
-    markDirty(bm, page);
-    unpinPage(bm, page);
-    forcePage(bm, page);
+void markDirtyAndUnpin(BM_BufferPool *bufferPool, BM_PageHandle *page) {
+    markDirty(bufferPool, page);
+    unpinPage(bufferPool, page);
+    forcePage(bufferPool, page);
 }
-void calculateSlotAndPage(recrd_mgr_tablemgr_g17 *mgr_data_g17, int *slot_g17, int *pg_number_g17)
-{
-    int slot_available_g17 = ((*pg_number_g17 - 1) * scan_Mgmt_Data.max_no_of_slots_g17);
-    *slot_g17 = mgr_data_g17->no_of_recrds_g17 - slot_available_g17;
 
-    if (*slot_g17 == scan_Mgmt_Data.max_no_of_slots_g17)
-    {
-        *slot_g17 = 0;
-        *pg_number_g17 = *pg_number_g17 + 1;
+void calculateSlotAndPage(RecordManagerTable *managementData, int *slot, int *pageNumber) {
+    int availableSlots = ((*pageNumber - 1) * scanManagementData.maxSlots);
+    *slot = managementData->totalRecords - availableSlots;
+
+    if (*slot == scanManagementData.maxSlots) {
+        *slot = 0;
+        *pageNumber = *pageNumber + 1;
     }
 
-    mgr_data_g17->final_page_recrd_read_g17 = *pg_number_g17;
+    managementData->lastPageRead = *pageNumber;
 }
-void copyRecordToString(char *string_record_g17, Record *record)
-{
-    // Copy the record data to the string variable
-    for (int i = 0; i < scan_Mgmt_Data.length_of_slot_g17; i++)
-    {
-        string_record_g17[i] = record->data[i];
+
+void copyRecordData(char *recordString, Record *record) {
+    for (int i = 0; i < scanManagementData.slotLength; i++) {
+        recordString[i] = record->data[i];
     }
 }
-void insertDataIntoPage(BM_PageHandle *page, char *string_record_g17, int slot_g17)
-{
-    for (int i = 0; i < scan_Mgmt_Data.length_of_slot_g17; i++)
-    {
-        page->data[(slot_g17 * scan_Mgmt_Data.length_of_slot_g17) + i] = string_record_g17[i];
+
+void insertDataIntoPage(BM_PageHandle *page, char *recordString, int slot) {
+    for (int i = 0; i < scanManagementData.slotLength; i++) {
+        page->data[(slot * scanManagementData.slotLength) + i] = recordString[i];
     }
 }
-RC insertRecord(RM_TableData *rel, Record *record)
-{
-    recrd_mgr_tablemgr_g17 mgr_data_g17 = recrd_table_mgr_g17;
-    
-    int slot_g17, pg_number_g17 = mgr_data_g17.final_page_recrd_read_g17;
-    
+
+RC insertRecord(RM_TableData *relation, Record *record) {
+    RecordManagerTable managementData = tableManager;
+    int slot, pageNumber = managementData.lastPageRead;
     BM_PageHandle *page = (BM_PageHandle *)malloc(sizeof(BM_PageHandle));
-    
-    char *string_record_g17 = (char *)malloc(scan_Mgmt_Data.length_of_slot_g17);
-    calculateSlotAndPage(&mgr_data_g17, &slot_g17, &pg_number_g17);
+    char *recordString = (char *)malloc(scanManagementData.slotLength);
+    calculateSlotAndPage(&managementData, &slot, &pageNumber);
 
-    record->id.page = pg_number_g17;
-    record->id.slot = slot_g17;
+    record->id.page = pageNumber;
+    record->id.slot = slot;
 
-    copyRecordToString(string_record_g17, record);
+    copyRecordData(recordString, record);
 
-    pinPage(mgr_data_g17.bm, page, pg_number_g17);
+    pinPage(managementData.bufferPool, page, pageNumber);
 
-    insertDataIntoPage(page, string_record_g17, slot_g17);
+    insertDataIntoPage(page, recordString, slot);
 
-    dirty_unpin_force_g17(mgr_data_g17.bm, page);
+    markDirtyAndUnpin(managementData.bufferPool, page);
 
-    mgr_data_g17.no_of_recrds_g17++;
-    recrd_table_mgr_g17 = mgr_data_g17;
+    managementData.totalRecords++;
+    tableManager = managementData;
 
-    string_record_g17 = return_null_g17();
-    free(string_record_g17);
+    recordString = returnNull();
+    free(recordString);
     free(page);
 
     return RC_OK;
 }
 
-void clearRecordData(char *string_record_g17)
-{
-    for (int i = 0; i < scan_Mgmt_Data.length_of_slot_g17; i++)
-    {
-        string_record_g17[i] = '\0';
+void clearRecordData(char *recordString) {
+    for (int i = 0; i < scanManagementData.slotLength; i++) {
+        recordString[i] = '\0';
     }
 }
-void writeClearedDataToPage(BM_PageHandle *page, char *string_record_g17, int slot_g17)
-{
-    for (int i = 0; i < scan_Mgmt_Data.length_of_slot_g17; i++)
-    {
-        page->data[(slot_g17 * scan_Mgmt_Data.length_of_slot_g17) + i] = string_record_g17[i];
-    }
-}
-RC deleteRecord(RM_TableData *rel, RID id)
-{
-    recrd_mgr_tablemgr_g17 mgr_data_g17 = recrd_table_mgr_g17;
 
-    char *string_record_g17 = (char *)malloc(scan_Mgmt_Data.length_of_slot_g17);
-    
+void writeClearedDataToPage(BM_PageHandle *page, char *recordString, int slot) {
+    for (int i = 0; i < scanManagementData.slotLength; i++) {
+        page->data[(slot * scanManagementData.slotLength) + i] = recordString[i];
+    }
+}
+
+RC deleteRecord(RM_TableData *relation, RID id) {
+    RecordManagerTable managementData = tableManager;
+    char *recordString = (char *)malloc(scanManagementData.slotLength);
     BM_PageHandle *page = (BM_PageHandle *)malloc(sizeof(BM_PageHandle));
+    int slot = id.slot;
+    int pageNumber = id.page;
 
-   
-    int slot_g17 = id.slot;
-    int pg_number_g17 = id.page;
+    pinPage(managementData.bufferPool, page, pageNumber);
 
-    pinPage(mgr_data_g17.bm, page, pg_number_g17);
+    clearRecordData(recordString);
 
-    clearRecordData(string_record_g17);
+    writeClearedDataToPage(page, recordString, slot);
 
-    writeClearedDataToPage(page, string_record_g17, slot_g17);
+    markDirtyAndUnpin(managementData.bufferPool, page);
 
-    dirty_unpin_force_g17(mgr_data_g17.bm, page);
+    managementData.totalRecords--;
+    tableManager = managementData;
 
-    mgr_data_g17.no_of_recrds_g17--;
-    recrd_table_mgr_g17 = mgr_data_g17;
-
-    free(string_record_g17);
+    free(recordString);
     free(page);
 
     return RC_OK;
 }
 
-
-void prepareRecordData(char *string_record_g17, Record *record)
-{
-    for (int i = 0; i < scan_Mgmt_Data.length_of_slot_g17; i++)
-    {
-        string_record_g17[i] = record->data[i];
+void prepareRecordData(char *recordString, Record *record) {
+    for (int i = 0; i < scanManagementData.slotLength; i++) {
+        recordString[i] = record->data[i];
     }
 }
-void updateRecordOnPage(BM_PageHandle *page, char *string_record_g17, int slot_g17)
-{
-    for (int i = 0; i < scan_Mgmt_Data.length_of_slot_g17; i++)
-    {
-        page->data[(slot_g17 * scan_Mgmt_Data.length_of_slot_g17) + i] = string_record_g17[i];
+
+void updateRecordOnPage(BM_PageHandle *page, char *recordString, int slot) {
+    for (int i = 0; i < scanManagementData.slotLength; i++) {
+        page->data[(slot * scanManagementData.slotLength) + i] = recordString[i];
     }
 }
-RC updateRecord(RM_TableData *rel, Record *record)
-{
-    int slot_g17 = record->id.slot;
 
-    recrd_mgr_tablemgr_g17 mgr_data_g17 = recrd_table_mgr_g17;
-
+RC updateRecord(RM_TableData *relation, Record *record) {
+    int slot = record->id.slot;
+    RecordManagerTable managementData = tableManager;
     BM_PageHandle *page = (BM_PageHandle *)malloc(sizeof(BM_PageHandle));
+    char *recordString = (char *)malloc(scanManagementData.slotLength);
+    int pageNumber = record->id.page;
 
-    char *string_record_g17 = (char *)malloc(scan_Mgmt_Data.length_of_slot_g17);
-    
-    int pg_number_g17 = record->id.page;
+    prepareRecordData(recordString, record);
 
-    prepareRecordData(string_record_g17, record);
+    pinPage(managementData.bufferPool, page, pageNumber);
 
-    pinPage(mgr_data_g17.bm, page, pg_number_g17);
+    updateRecordOnPage(page, recordString, slot);
 
-    updateRecordOnPage(page, string_record_g17, slot_g17);
+    markDirtyAndUnpin(managementData.bufferPool, page);
 
-    dirty_unpin_force_g17(mgr_data_g17.bm, page);
+    tableManager = managementData;
 
-   recrd_table_mgr_g17 = mgr_data_g17;
-
-    free(string_record_g17);
+    free(recordString);
     free(page);
 
     return RC_OK;
 }
 
-RC pinPageAndRetrieveData(BM_BufferPool *bm, BM_PageHandle *page, RID id, char *string_record_g17)
-{
-    int slot_g17 = id.slot;
-    int pg_number_g17 = id.page;
+RC pinPageAndRetrieveData(BM_BufferPool *bufferPool, BM_PageHandle *page, RID id, char *recordString) {
+    int slot = id.slot;
+    int pageNumber = id.page;
 
-    if (pinPage(bm, page, pg_number_g17) != RC_OK) {
+    if (pinPage(bufferPool, page, pageNumber) != RC_OK) {
         return RC_ERROR;
     }
 
-    for (int i = 0; i < scan_Mgmt_Data.length_of_slot_g17; i++)
-    {
-        string_record_g17[i] = page->data[(slot_g17 * scan_Mgmt_Data.length_of_slot_g17) + i];
+    for (int i = 0; i < scanManagementData.slotLength; i++) {
+        recordString[i] = page->data[(slot * scanManagementData.slotLength) + i];
     }
 
     return RC_OK;
 }
 
-RC validateRecord(int pg_number_g17, int slot_g17, int *counter, recrd_mgr_tablemgr_g17 *mgr_data_g17, char *string_record_g17)
-{
+RC validateRecord(int pageNumber, int slot, int *counter, RecordManagerTable *managementData, char *recordString) {
     *counter = 0;
-    int recordNum = (pg_number_g17 - 1) * (scan_Mgmt_Data.max_no_of_slots_g17) + slot_g17 + 1;
+    int recordNum = (pageNumber - 1) * (scanManagementData.maxSlots) + slot + 1;
 
-    while (*counter < scan_Mgmt_Data.length_of_slot_g17 && string_record_g17[*counter] != '\0')
-    {
+    while (*counter < scanManagementData.slotLength && recordString[*counter] != '\0') {
         (*counter)++;
     }
 
-    if (recordNum > mgr_data_g17->no_of_recrds_g17)
-    {
+    if (recordNum > managementData->totalRecords) {
         return RC_ERROR;
     }
-    if (*counter == scan_Mgmt_Data.length_of_slot_g17)
-    {
+    if (*counter == scanManagementData.slotLength) {
         RC_message = "Accessing a deleted or empty record";
         return RC_ERROR;
     }
@@ -460,128 +383,109 @@ RC validateRecord(int pg_number_g17, int slot_g17, int *counter, recrd_mgr_table
     return RC_OK;
 }
 
-RC getRecord(RM_TableData *rel, RID id, Record *record)
-{    
+RC getRecord(RM_TableData *relation, RID id, Record *record) {
     BM_PageHandle *page = (BM_PageHandle *)malloc(sizeof(BM_PageHandle));
-    char *string_record_g17 = (char *)malloc(scan_Mgmt_Data.length_of_slot_g17);
-    recrd_mgr_tablemgr_g17 mgr_data_g17 = recrd_table_mgr_g17;
+    char *recordString = (char *)malloc(scanManagementData.slotLength);
+    RecordManagerTable managementData = tableManager;
 
-    if (pinPageAndRetrieveData(mgr_data_g17.bm, page, id, string_record_g17) != RC_OK)
-    {
+    if (pinPageAndRetrieveData(managementData.bufferPool, page, id, recordString) != RC_OK) {
         free(page);
-        free(string_record_g17);
+        free(recordString);
         return RC_ERROR;
     }
 
-    unpinPage(mgr_data_g17.bm, page);
+    unpinPage(managementData.bufferPool, page);
     record->id.page = id.page;
     record->id.slot = id.slot;
-    record->data = string_record_g17;
+    record->data = recordString;
 
     int counter;
-    RC validationResult = validateRecord(id.page, id.slot, &counter, &mgr_data_g17, string_record_g17);
-    if (validationResult != RC_OK)
-    {
+    RC validationResult = validateRecord(id.page, id.slot, &counter, &managementData, recordString);
+    if (validationResult != RC_OK) {
         free(page);
-        free(string_record_g17);
+        free(recordString);
         return validationResult;
     }
 
-    recrd_table_mgr_g17 = mgr_data_g17;
+    tableManager = managementData;
     free(page);
     return RC_OK;
 }
 
-void initializeScanMetadata(RM_ScanHandle *scan, RM_TableData *rel)
-{
-    int a_g17 = 0;
-    scan_MG_Data_g17.scan_count_g17 = a_g17;
-    int b_g17 = 1;
-    scan_MG_Data_g17.recrd_i_d_g17.page = b_g17;
-    scan_MG_Data_g17.recrd_i_d_g17.slot = a_g17;
-    scan->rel = rel;
+void initializeScanMetadata(RM_ScanHandle *scan, RM_TableData *relation) {
+    int defaultVal = 0;
+    scanData.scanCount = defaultVal;
+    int initialPage = 1;
+    scanData.recordID.page = initialPage;
+    scanData.recordID.slot = defaultVal;
+    scan->rel = relation;  // Use rel instead of relation
 }
 
-void setScanConditions(RM_ScanHandle *scan, Expr *condition_g17)
-{
-    scan_MG_Data_g17.condition_g17 = condition_g17;
-    scan->mgmtData = &scan_MG_Data_g17;
+void setScanConditions(RM_ScanHandle *scan, Expr *condition) {
+    scanData.condition = condition;
+    scan->mgmtData = &scanData;  // Use mgmtData instead of managementData
 }
 
-RC startScan(RM_TableData *rel, RM_ScanHandle *scan, Expr *condition_g17)
-{
-    initializeScanMetadata(scan, rel);
-
-    setScanConditions(scan, condition_g17);
-
+RC startScan(RM_TableData *relation, RM_ScanHandle *scan, Expr *condition) {
+    initializeScanMetadata(scan, relation);
+    setScanConditions(scan, condition);
     return RC_OK;
 }
 
-bool noMoreTuples()
-{
-    return (scan_MG_Data_g17.scan_count_g17 == recrd_table_mgr_g17.no_of_recrds_g17 || recrd_table_mgr_g17.no_of_recrds_g17 < 1);
+bool noMoreTuples() {
+    return (scanData.scanCount == tableManager.totalRecords || tableManager.totalRecords < 1);
 }
 
-void moveToNextSlotOrPage(int *cur_scan_page_g17, int *cur_scan_slot_g17)
-{
-    if (*cur_scan_slot_g17 != (no_of_records_per_page - 1))
-    {
-        (*cur_scan_slot_g17)++;
-    }
-    else
-    {
-        (*cur_scan_page_g17)++;
-        *cur_scan_slot_g17 = 0;
+void moveToNextSlotOrPage(int *currentPage, int *currentSlot) {
+    if (*currentSlot != (recordsPerPage - 1)) {
+        (*currentSlot)++;
+    } else {
+        (*currentPage)++;
+        *currentSlot = 0;
     }
 }
-RC evaluateQueryCondition(RM_ScanHandle *scan, Record *record, Value **result_query_g17, int *cur_scan_page_g17, int *cur_scan_slot_g17)
-{
-    if (scan_MG_Data_g17.condition_g17 == NULL)
-    {
-        (*result_query_g17)->v.boolV = TRUE;
-    }
-    else
-    {
-        evalExpr(record, scan->rel->schema, scan_MG_Data_g17.condition_g17, result_query_g17);
-        if ((*result_query_g17)->v.boolV == 1)
-        {
-            record->id.page = *cur_scan_page_g17;
-            record->id.slot = *cur_scan_slot_g17;
-            if (*cur_scan_slot_g17 != (no_of_records_per_page - 1)) {
-                *cur_scan_slot_g17 = *cur_scan_slot_g17 + 1;
-            } 
-            else {
-                (*cur_scan_page_g17)++;
-                *cur_scan_slot_g17 = 0;
+
+RC evaluateQueryCondition(RM_ScanHandle *scan, Record *record, Value **queryResult, int *currentPage, int *currentSlot) {
+    if (scanData.condition == NULL) {
+        (*queryResult)->v.boolV = TRUE;
+    } else {
+        evalExpr(record, scan->rel->schema, scanData.condition, queryResult);  // Use rel instead of relation
+        if ((*queryResult)->v.boolV == 1) {
+            record->id.page = *currentPage;
+            record->id.slot = *currentSlot;
+            if (*currentSlot != (recordsPerPage - 1)) {
+                *currentSlot = *currentSlot + 1;
+            } else {
+                (*currentPage)++;
+                *currentSlot = 0;
             }
-            scan_MG_Data_g17.recrd_i_d_g17.page = *cur_scan_page_g17;
-            scan_MG_Data_g17.recrd_i_d_g17.slot = *cur_scan_slot_g17;
+            scanData.recordID.page = *currentPage;
+            scanData.recordID.slot = *currentSlot;
             return RC_OK;
         }
     }
     return RC_ERROR;
 }
 
-RC next(RM_ScanHandle *scan, Record *record)
-{
+RC next(RM_ScanHandle *scan, Record *record) {
     if (noMoreTuples())
         return RC_RM_NO_MORE_TUPLES;
 
-    int cur_scan_page_g17 = scan_MG_Data_g17.recrd_i_d_g17.page;
-    int cur_scan_slot_g17 = scan_MG_Data_g17.recrd_i_d_g17.slot;
-    int cur_recrd_sum_scan_g17 = scan_MG_Data_g17.scan_count_g17;
+    int currentPage = scanData.recordID.page;
+    int currentSlot = scanData.recordID.slot;
+    int currentRecordCount = scanData.scanCount;
 
-    scan_MG_Data_g17.scan_count_g17++;
+    scanData.scanCount++;
 
-    Value *result_query_g17 = (Value *)malloc(sizeof(Value));
+    Value *queryResult = (Value *)malloc(sizeof(Value));
 
     do {
-        int temp_slot_g17 = cur_scan_slot_g17;
-        scan_MG_Data_g17.recrd_i_d_g17.slot = temp_slot_g17;
-        int temp_page_g17 = cur_scan_page_g17;
-        scan_MG_Data_g17.recrd_i_d_g17.page = temp_page_g17;
-        
-        RC rc = getRecord(scan->rel, scan_MG_Data_g17.recrd_i_d_g17, record);
+        int tempSlot = currentSlot;
+        scanData.recordID.slot = tempSlot;
+        int tempPage = currentPage;
+        scanData.recordID.page = tempPage;
+
+        RC rc = getRecord(scan->rel, scanData.recordID, record);  // Use rel instead of relation
         RC MSG = RC_OK;
 
         if (rc == MSG) {
@@ -589,48 +493,44 @@ RC next(RM_ScanHandle *scan, Record *record)
             RC_message = "Record not found!!";
         }
 
-        if (evaluateQueryCondition(scan, record, &result_query_g17, &cur_scan_page_g17, &cur_scan_slot_g17) == RC_OK) {
+        if (evaluateQueryCondition(scan, record, &queryResult, &currentPage, &currentSlot) == RC_OK) {
             return MSG;
         }
 
-        moveToNextSlotOrPage(&cur_scan_page_g17, &cur_scan_slot_g17);
-        cur_recrd_sum_scan_g17++;
-    } while (cur_recrd_sum_scan_g17 < recrd_table_mgr_g17.no_of_recrds_g17);
+        moveToNextSlotOrPage(&currentPage, &currentSlot);
+        currentRecordCount++;
+    } while (currentRecordCount < tableManager.totalRecords);
 
-    bool bool_val = TRUE;
-    result_query_g17->v.boolV = bool_val;
-    int a_g17 = 0;
-    scan_MG_Data_g17.recrd_i_d_g17.slot = a_g17;
-    int b_g17 = 1;
-    scan_MG_Data_g17.scan_count_g17 = a_g17;
-    scan_MG_Data_g17.recrd_i_d_g17.page = b_g17;
+    bool boolVal = TRUE;
+    queryResult->v.boolV = boolVal;
+    int defaultVal = 0;
+    scanData.recordID.slot = defaultVal;
+    int initialPage = 1;
+    scanData.scanCount = defaultVal;
+    scanData.recordID.page = initialPage;
 
     return RC_RM_NO_MORE_TUPLES;
 }
 
-void resetScanCount()
-{
-    scan_MG_Data_g17.scan_count_g17 = 0;
+void resetScanCount() {
+    scanData.scanCount = 0;
 }
 
-void resetRecordID()
-{
-    int a_g17 = 0;
-    scan_MG_Data_g17.recrd_i_d_g17.slot = a_g17;
-    int b_g17 = 1;
-    scan_MG_Data_g17.recrd_i_d_g17.page = b_g17;
+void resetRecordID() {
+    int defaultVal = 0;
+    scanData.recordID.slot = defaultVal;
+    int initialPage = 1;
+    scanData.recordID.page = initialPage;
 }
 
-RC closeScan(RM_ScanHandle *scan)
-{
+RC closeScan(RM_ScanHandle *scan) {
     resetScanCount();
     resetRecordID();
     return RC_OK;
 }
-int getDataTypeSize(DataType dataType)
-{
-    switch (dataType)
-    {
+
+int getDataTypeSize(DataType dataType) {
+    switch (dataType) {
         case DT_INT: return sizeof(int);
         case DT_STRING: return sizeof(char);
         case DT_FLOAT: return sizeof(float);
@@ -639,86 +539,74 @@ int getDataTypeSize(DataType dataType)
     }
 }
 
-int calculateAttributeSize(Schema *schema, int index_g17)
-{
-    DataType dataType = schema->dataTypes[index_g17];
+int calculateAttributeSize(Schema *schema, int index) {
+    DataType dataType = schema->dataTypes[index];
     int size = getDataTypeSize(dataType);
-    return (dataType == DT_STRING) ? size * schema->typeLength[index_g17] : size;
+    return (dataType == DT_STRING) ? size * schema->typeLength[index] : size;
 }
 
-int calculateTotalRecordSize(Schema *schema)
-{
-    int size_total_g17 = 0;
-    for (int i = 0; i < schema->numAttr; i++)
-    {
-        size_total_g17 += calculateAttributeSize(schema, i);
+int calculateTotalRecordSize(Schema *schema) {
+    int totalSize = 0;
+    for (int i = 0; i < schema->numAttr; i++) {
+        totalSize += calculateAttributeSize(schema, i);
     }
-    return size_total_g17;
+    return totalSize;
 }
 
-int getRecordSize(Schema *schema)
-{
+int getRecordSize(Schema *schema) {
     return calculateTotalRecordSize(schema);
 }
 
-Schema *allocateSchemaMemory(int numAttr, int keySize)
-{
+Schema *allocateSchemaMemory(int numAttr, int keySize) {
     Schema *schema = (Schema *)malloc(sizeof(Schema));
-    if (!schema)
-    {
+    if (!schema) {
         return NULL;
     }
-    int key_g17 = keySize;
-    schema->keySize = key_g17;
+    int key = keySize;
+    schema->keySize = key;
 
-    int num_attribute_g17 = numAttr;
-    schema->numAttr = num_attribute_g17;
+    int numAttributes = numAttr;
+    schema->numAttr = numAttributes;
 
-    int size_g17 = sizeof(int) * numAttr;
-    schema->typeLength = (int *)malloc(size_g17);
+    int size = sizeof(int) * numAttr;
+    schema->typeLength = (int *)malloc(size);
 
-    int size_g17_1 = sizeof(DataType) * numAttr;
-    schema->dataTypes = (DataType *)malloc(size_g17_1);
+    int size1 = sizeof(DataType) * numAttr;
+    schema->dataTypes = (DataType *)malloc(size1);
 
-    int size_g17_2 = sizeof(int) * keySize;
-    schema->keyAttrs = (int *)malloc(size_g17_2);
+    int size2 = sizeof(int) * keySize;
+    schema->keyAttrs = (int *)malloc(size2);
 
-    int size_g17_3 = sizeof(char *) * numAttr;
-    schema->attrNames = (char **)malloc(size_g17_3);
+    int size3 = sizeof(char *) * numAttr;
+    schema->attrNames = (char **)malloc(size3);
 
     return schema;
 }
 
-void copyAttributes(Schema *schema, int numAttr, char **attrNames, DataType *dataTypes, int *typeLength)
-{
-    for (int j = 0; j < numAttr; j++)
-    {   
+void copyAttributes(Schema *schema, int numAttr, char **attrNames, DataType *dataTypes, int *typeLength) {
+    for (int j = 0; j < numAttr; j++) {
         schema->attrNames[j] = attrNames[j];
         schema->dataTypes[j] = dataTypes[j];
         schema->typeLength[j] = typeLength[j];
     }
 }
 
-void copyKeyAttributes(Schema *schema, int keySize, int *keys)
-{
-    for (int j = 0; j < keySize; j++)
-    {
+void copyKeyAttributes(Schema *schema, int keySize, int *keys) {
+    for (int j = 0; j < keySize; j++) {
         schema->keyAttrs[j] = keys[j];
     }
 }
 
-Schema *createSchema(int numAttr, char **attrNames, DataType *dataTypes, int *typeLength, int keySize, int *keys)
-{
-    
+Schema *createSchema(int numAttr, char **attrNames, DataType *dataTypes, int *typeLength, int keySize, int *keys) {
     Schema *schema = allocateSchemaMemory(numAttr, keySize);
-    if (schema == NULL)
-    {
+    if (schema == NULL) {
         return NULL;
     }
     copyAttributes(schema, numAttr, attrNames, dataTypes, typeLength);
     copyKeyAttributes(schema, keySize, keys);
     return schema;
 }
+
 void freeAttributeNames(char **attrNames, int numAttr) {
     for (int i = 0; i < numAttr; i++) {
         free(attrNames[i]);
@@ -732,44 +620,44 @@ void freeSchemaComponents(Schema *schema) {
 }
 
 RC freeSchema(Schema *schema) {
-    Schema *release_schma_g17 = schema;
-    freeAttributeNames(release_schma_g17->attrNames, release_schma_g17->numAttr);
-    freeSchemaComponents(release_schma_g17);
-    free(release_schma_g17);
+    Schema *releaseSchema = schema;
+    freeAttributeNames(releaseSchema->attrNames, releaseSchema->numAttr);
+    freeSchemaComponents(releaseSchema);
+    free(releaseSchema);
     return RC_OK;
 }
 
 RC createRecord(Record **record, Schema *schema) {
-    int dummy_check = 1;
+    int dummyCheck = 1;
     *record = (Record *)malloc(sizeof(Record));
-    if (dummy_check && (*record == return_null_g17())) {
+    if (dummyCheck && (*record == returnNull())) {
         RC_message = "Memory allocation error for Record.";
         return RC_MEMORY_ALLOCATION_ERROR;
     }
-    dummy_check = 0;
-    int size_g17 = getRecordSize(schema);
-    (*record)->data = (char *)malloc(size_g17);
-    if (!dummy_check && (*record)->data == NULL) {
+    dummyCheck = 0;
+    int size = getRecordSize(schema);
+    (*record)->data = (char *)malloc(size);
+    if (!dummyCheck && (*record)->data == NULL) {
         RC_message = "Memory allocation error for Record data.";
         free(*record);
         return RC_MEMORY_ALLOCATION_ERROR;
     }
-    return dummy_check == 0 ? RC_OK : RC_ERROR;
+    return dummyCheck == 0 ? RC_OK : RC_ERROR;
 }
 
-RC freeRecord(Record *record) {   
-    if (record == return_null_g17()) {
+RC freeRecord(Record *record) {
+    if (record == returnNull()) {
         RC_message = "The record pointer passed is null.";
         return RC_NULL_POINTER;
     } else {
-        int temp_var = 0;
-        temp_var += 1;
+        int tempVar = 0;
+        tempVar += 1;
         free(record->data);
-        if (temp_var > 0) {
-            temp_var--;
+        if (tempVar > 0) {
+            tempVar--;
         }
         free(record);
-        temp_var += 10;
+        tempVar += 10;
         return RC_OK;
     }
 }
@@ -792,41 +680,41 @@ RC validateAttrNum(int attrNum) {
 
 RC extractAttrValue(Record *record, Schema *schema, int attrNum, int offset, Value **value) {
     int var = 0;
-    Value *accum_value_g17 = (Value *)malloc(sizeof(Value));
+    Value *accumValue = (Value *)malloc(sizeof(Value));
     if (schema->dataTypes[attrNum] == DT_INT) {
-        accum_value_g17->v.intV = *((int *)&record->data[offset]);
-        accum_value_g17->dt = DT_INT;
-        var += accum_value_g17->v.intV;
+        accumValue->v.intV = *((int *)&record->data[offset]);
+        accumValue->dt = DT_INT;
+        var += accumValue->v.intV;
     } else if (schema->dataTypes[attrNum] == DT_STRING) {
-        int tempo = schema->typeLength[attrNum];
-        accum_value_g17->v.stringV = malloc(tempo * sizeof(char));
+        int temp = schema->typeLength[attrNum];
+        accumValue->v.stringV = malloc(temp * sizeof(char));
         for (int i = 0; i < schema->typeLength[attrNum]; i++) {
-            char temp = record->data[offset + i];
-            accum_value_g17->v.stringV[i] = temp;
+            char tempChar = record->data[offset + i];
+            accumValue->v.stringV[i] = tempChar;
             if (var < 0) {
                 var += 0;
             }
             var++;
         }
-        accum_value_g17->v.stringV[schema->typeLength[attrNum]] = '\0';
-        accum_value_g17->dt = DT_STRING;
+        accumValue->v.stringV[schema->typeLength[attrNum]] = '\0';
+        accumValue->dt = DT_STRING;
         var *= 2;
     } else if (schema->dataTypes[attrNum] == DT_FLOAT) {
-        accum_value_g17->v.floatV = *(float *)&record->data[offset];
-        accum_value_g17->dt = DT_FLOAT;
-        var += (int)accum_value_g17->v.floatV;
+        accumValue->v.floatV = *(float *)&record->data[offset];
+        accumValue->dt = DT_FLOAT;
+        var += (int)accumValue->v.floatV;
     } else if (schema->dataTypes[attrNum] == DT_BOOL) {
-        accum_value_g17->v.boolV = *(bool *)&record->data[offset];
-        accum_value_g17->dt = DT_BOOL;
+        accumValue->v.boolV = *(bool *)&record->data[offset];
+        accumValue->dt = DT_BOOL;
         var *= 2;
     }
-    *value = accum_value_g17;
+    *value = accumValue;
     var += 0;
     return RC_OK;
 }
 
 RC getAttr(Record *record, Schema *schema, int attrNum, Value **value) {
-    int Offset_Attr_g17 = 0;
+    int offset = 0;
     RC output = checkNullPointers(schema, record);
     if (output != RC_OK) {
         return output;
@@ -835,8 +723,8 @@ RC getAttr(Record *record, Schema *schema, int attrNum, Value **value) {
     if (output != RC_OK) {
         return output;
     }
-    attrOffset(schema, attrNum, &Offset_Attr_g17);
-    return extractAttrValue(record, schema, attrNum, Offset_Attr_g17, value);
+    attrOffset(schema, attrNum, &offset);
+    return extractAttrValue(record, schema, attrNum, offset, value);
 }
 
 RC checkSchemaPointer(Schema *schema) {
@@ -847,7 +735,7 @@ RC checkSchemaPointer(Schema *schema) {
     return RC_OK;
 }
 
-RC checkValidAttrNum_g17(int attrNum) {
+RC checkValidAttrNum(int attrNum) {
     if (attrNum < 0) {
         RC_message = "Attribute number less than 0.";
         return RC_IM_KEY_NOT_FOUND;
@@ -856,25 +744,25 @@ RC checkValidAttrNum_g17(int attrNum) {
 }
 
 RC setAttributeValue(Record *record, Value *value, int offset) {
-    int tempo_length_g17;
+    int tempLength;
     int var = 0;
     if (value->dt == DT_INT) {
         *((int *)&record->data[offset]) = value->v.intV;
         var += value->v.intV;
     } else if (value->dt == DT_STRING) {
-        int G_17 = 0;
-        tempo_length_g17 = strlen(value->v.stringV);
-        if (G_17 == 0) {
-            G_17++;
+        int G = 0;
+        tempLength = strlen(value->v.stringV);
+        if (G == 0) {
+            G++;
         }
-        for (int i_g17 = 0; i_g17 < tempo_length_g17; i_g17++) {
-            char temp = value->v.stringV[i_g17];
-            record->data[offset + i_g17] = temp;
+        for (int i = 0; i < tempLength; i++) {
+            char tempChar = value->v.stringV[i];
+            record->data[offset + i] = tempChar;
             if (var == 0) {
                 var++;
             }
         }
-        record->data[offset + tempo_length_g17] = '\0';
+        record->data[offset + tempLength] = '\0';
         var *= 2;
     } else if (value->dt == DT_FLOAT) {
         *((float *)&record->data[offset]) = value->v.floatV;
@@ -883,7 +771,7 @@ RC setAttributeValue(Record *record, Value *value, int offset) {
         *((bool *)&record->data[offset]) = value->v.boolV;
         var -= (value->v.boolV ? 1 : 0);
     }
-    var += 0; 
+    var += 0;
     return RC_OK;
 }
 
@@ -892,11 +780,11 @@ RC setAttr(Record *record, Schema *schema, int attrNum, Value *value) {
     if (rc != RC_OK) {
         return rc;
     }
-    rc = checkValidAttrNum_g17(attrNum);
+    rc = checkValidAttrNum(attrNum);
     if (rc != RC_OK) {
         return rc;
     }
-    int Offset_Attr_g17;
-    attrOffset(schema, attrNum, &Offset_Attr_g17);
-    return setAttributeValue(record, value, Offset_Attr_g17);
+    int offset;
+    attrOffset(schema, attrNum, &offset);
+    return setAttributeValue(record, value, offset);
 }

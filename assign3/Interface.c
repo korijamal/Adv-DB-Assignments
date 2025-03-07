@@ -41,7 +41,7 @@ int main()
         printf("\n");
         printf("5. Update a record in the table\n");
         printf("\n");
-        printf("6. Exit\n");
+        printf("6. Exit\n\n");
         printf("Enter your choice: ");
         scanf("%d", &userChoice);
 

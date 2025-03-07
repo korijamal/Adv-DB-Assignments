@@ -4,45 +4,42 @@
 ## PROGRAMMING ASSIGNMENT 3: RECORD MANAGER 
 
 ### Group_17 Team Members:
-1. Venkata Naga Lakshmi Sai Snigdha Sri Jata - A20560684 - 25% Contributed
-2. Adarsh Chidirala - A20561069 - 25% Contributed
-4. Sharan Rama Prakash Shenoy - A20560683 - 25% Contributed
-5. Ajay Kumar Choudary Koneti - A20563634 - 25% Contributed
+1. Kori Kamoljonov - XXXXXXXX - 25% Contributed
+2. Lastname Name - XXXXXXXX - 25% Contributed
+3. Lastname Name - XXXXXXXX - 25% Contributed
+
 
 ---
 
 ## README- Record Manger
 
-This README provides an overview of the Record Manager code, which is divided into five main sections: Tables and Manager, handling records in a table, scans, dealing with schemas, and dealing with records and attribute values. Each section explains the purpose and functionality of the relevant functions and methods.
+This README provides a comprehensive overview of the Record Manager implementation, highlighting its functionality and the steps required to execute the code. The Record Manager is structured into five key sections: Table Management, Record Handling, Scanning Mechanisms, Schema Management, and Attribute Operations.
 
 ---
 
-## Optional Extensions: 
+## Additional Features: 
 
-We have implemented an Interactive Interface extension that allows you to define new tables, insert, update, and delete tuples, and execute scans. This implementation provides a menu-based command-line interface (CLI).
+We have included an Interactive Interface that enables users to define tables, insert, update, and delete records, as well as perform scans. This feature is implemented as a menu-driven command-line interface (CLI) for ease of use.
+
 
 ---
 
 
 ## The Procedure to Run the Code:
 
-Step 1: Navigate to the new branch created "Assignment3" branch in Git-Hub and download the necessary .zip file.
+Step 1: Switch to the "Assignment3" branch in the GitHub repository and download the necessary files.
 
 Step 2: Run "make clean" to remove any previously compiled files.
 
-Step 3: Use the "make" command to compile the program by running the Makefile.
+Step 3: Compile the program using the make command.
 
 Step 4: Execute the test case 3_1 by running "./test_assign3_1".
 
-Step 5: Execute the test expressions by running "./test_expr".
+Step 5: Run the expression test cases using ./test_expr.
 
-Step 6: Execute the test Interactive Interface by running "./Interface". 
+Step 6: Launch the interactive interface using ./Interface.
 
-Step 7: Once again, use "make clean" to remove generated executable files, and repeat steps 3 and 5 to rerun the assignment.
-
-
-Step 6: Once again, use "make clean" to remove generated executable files, and repeat steps 3 and 5 to rerun the assignment.
-
+Step 7: After execution, clean up generated files using make clean and repeat steps 3 to 5 if necessary.
 
 ---
 ## Features To Do
